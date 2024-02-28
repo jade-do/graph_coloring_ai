@@ -60,9 +60,9 @@ def initDomains():
 
 # test Minimum Remaining Value on the vertex on the left
 # the vertex with the fewest legal values remain gets top priority
-def MRV(v):
-    vIndex = vertices.index(v)
-    return len(domains[vIndex])
+def MRV(vertices_order, clone_domains):
+    vertices_order.sort(key = lambda v: len(clone_domains[v]))
+    return vertices_order
 
 # test Most Constrained Vertex on the vertex on the left
 # choose the vertex that is involved in more constraints
@@ -71,13 +71,15 @@ def MCV(v):
     vIndex = vertices.index(v)
     return len(constraints[vIndex])
 
-def heuristic(v):
-    # vertex that has the fewest remaining value
-    # and that is involved in more constraints will have higher priority
+def heuristic_vertices_order(vertices_order, clone_domains):
+    # MRV: the vertex with the fewest legal color values remain gets top priority
+    # Tie-breaking rule: the vertex that is involved in more constraints will have higher priority
     # Items are retrieved priority order (lowest first)
-    return MRV(v) - MCV(v)
+    vertices_order.sort(key=lambda v: len(clone_domains[v]) - len(constraints[v]))
+    return vertices_order
+    # return MRV(v) - MCV(v)
 
-def update_neighbor_constraints(vertex, color, clone_domains):
+def prune_neighbor_domains(vertex, color, clone_domains):
     for neighbor in constraints[vertex]:
         if color in clone_domains[neighbor]:
             clone_domains[neighbor].remove(color)
@@ -90,8 +92,9 @@ def order_domain_values(vertex, clone_domains):
     # The color with the most inconsistent neighbors - more constrained - will be explored first - fail fast
     # see the heuristic detail in is_consistent(vIndex, color) function below
     domain = clone_domains[vertex]
-    domain.sort(key = lambda color: is_consistent(vertex, color), reverse = True)
+    domain.sort(key = lambda color: is_consistent(vertex, color), reverse = False)
     return domain
+
 
 def is_consistent(vertex, color):
     # TODO: a count so is_consistent() returns a number
@@ -110,27 +113,30 @@ def is_consistent(vertex, color):
 def is_complete():
     return len(coloring) == len(vertices)
 
-def graph_coloring_util(current_vIndex, current_domains):
+def graph_coloring_util(current_vertices, current_vIndex, current_domains):
     # Base case: All vertices colored, print the solution
     if is_complete():
         print(f"Coloring: {coloring}")
         return True
 
-    current_vertex = vertices[current_vIndex]
-    current_domain_heuristic = order_domain_values(current_vertex, copy.deepcopy(current_domains))
+    current_vertex = current_vertices[current_vIndex]
 
-    for color in current_domain_heuristic:
+    for color in current_domains[current_vertex]:
         clone_domains = copy.deepcopy(current_domains)
+        colored_vertices = copy.deepcopy(current_vertices)[0: current_vIndex+1]
+        uncolored_vertices = copy.deepcopy(current_vertices)[current_vIndex+1: len(current_vertices)]
 
         if is_consistent(current_vertex, color) == 0:
-            # if coloring the vertex with this color does not violate any constraints for the neighbors
+            # if coloring the vertex with this color does not
+            # violate any constraints for the neighbors
             coloring[current_vertex] = color
 
-            # TODO: Constraint propagation: Remove the colored color from the neighbors constraints
-            pruned_domains = update_neighbor_constraints(current_vertex, color, clone_domains)
+            # Constraint propagation: Remove the colored color from the neighbors constraints
+            heuristic_vertices= colored_vertices + heuristic_vertices_order(uncolored_vertices, clone_domains)
+            pruned_domains = prune_neighbor_domains(current_vertex, color, clone_domains)
 
             # Recursively color the remaining vertices
-            if graph_coloring_util(current_vIndex+1, pruned_domains):
+            if graph_coloring_util(heuristic_vertices, current_vIndex+1, pruned_domains):
                 return True
 
             # Backtrack if assigning color c does not lead to a solution
@@ -142,13 +148,25 @@ def graph_coloring():
     global coloring
     coloring = {}
 
-    if graph_coloring_util(0, domains) == False:
+
+    if graph_coloring_util(vertices, 0, domains) == False:
         print("No solution exists")
         return False
 
     return True
 
-def start_search(fname):
+def test_coloring():
+    for node, neighbors in constraints.items():
+        color = coloring[node]
+        # print(color)
+        for neighbor in neighbors:
+            # print(coloring[neighbor])
+            if coloring[neighbor] == color:
+                print(f"Failed to color graph!")
+                return False
+    return True
+
+def start_coloring(fname):
 
     # Read Graph and Color
     readInput("inputs/" + fname)
@@ -167,23 +185,24 @@ def start_search(fname):
     initDomains()
     print(f"domains: \n {domains}")
 
-    graph_coloring()
+    result1 = graph_coloring()
 
-    for node, neighbors in constraints.items():
-        color = coloring[node]
-        # print(color)
-        for neighbor in neighbors:
-            # print(coloring[neighbor])
-            if coloring[neighbor] == color:
-                print(f"Failed to color graph!")
-                return False
+    if not result1:
+        # No solution
+        print(f"Sorry no color found!")
+        return "no solution"
 
-    print(f"Congratulations! Your graph is now colored!")
-    return True
+    else:
+        result2 = test_coloring()
+        if result2:
+            print(f"Congratulations! Your graph is now colored!")
+            return "correct solution"
+
+    return "incorrect solution"
 
 if __name__ == '__main__':
 
-    start_search("input7.txt")
+    start_coloring("input5.txt")
 
 
     # need to add a select_unassigned_vertices_heuristic and order_domain_value() method as in main3.py
